@@ -13,6 +13,9 @@ token = os.getenv("TELEGRAM_API_TOKEN")
 # print(token)
 dp = Dispatcher()
 
+class NotNumExeption(Exception):
+    def __init__(self, message):
+        self.message = ""
 
 @dp.message(CommandStart())
 async def start(message: Message):
@@ -37,21 +40,20 @@ async def help_command(message: Message):
                          /get_id - сообщит id текущего чата\n
                          /help - выведет все доступные комманды\n""")
 
+# на консультации использован отдельный handler, с более корректной отработкой функции eval
+@dp.message(lambda message: any(word in message.text.strip().lower().split() for word in['hi','hello','what’sup']))
+async def greet(message:Message):
+    await message.reply(f"Hey, {message.from_user.first_name}!")
 
 @dp.message()
 async def handle_message(message:Message):
     try:
+        if any(char.isalpha() for char in str(message.text)):
+            raise NotNumExeption
         await message.reply(f"{message.text} = {eval(message.text)}")
-    # Проверяем, содержит ли сообщение искомое слово
     except Exception:
-        if ('hi' or 'hello' or 'what’sup') in message.text.lower():
-        # Если слово найдено, отправляем ответ
-            await message.reply(f"Hey, {message.from_user.first_name}!")
-        else:
-            await message.reply(f"""Привет {message.from_user.full_name},\n
-'{message.text}' -that’s what you said.""")
-
-
+        await message.reply(f"Привет {message.from_user.full_name},\n"
+                            f"'{message.text}' -that’s what you said.""")
 
 async def main():
     bot = Bot(token=token)
