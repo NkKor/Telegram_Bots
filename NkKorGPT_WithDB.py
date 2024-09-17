@@ -2,10 +2,10 @@ import asyncio
 import logging
 import sys
 import os
-import dotenv
 import openai
 import pandas as pd
 import json
+import dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
@@ -13,28 +13,42 @@ from aiogram.types import Message
 
 dotenv.load_dotenv()
 token = os.getenv("TELEGRAM_API_TOKEN")
-openai.api_key = os.getenv("OPENAI_TOKEN")
-# print(token)
 dp = Dispatcher()
-try:
-    users_list = pd.read_csv("users.csv", index_col= "chat")
-except FileNotFoundError:
-    users_list = pd.DataFrame(columns=["context"])
-    users_list.index.name = "chat"
-    users_list.to_csv("users.csv")
 
-class NotNumExeption(Exception):
-    def __init__(self, message):
-        self.message = ""
+if not os.path.exists("users.csv"):
+    users_df = pd.DataFrame(
+        columns=[
+            'user_id',
+            'token_capacity',
+            'token_usage',
+            'last_message_date',
+            'context_capacity',
+            'context_length',
+            'context'
+        ]
+    )
+    users_df.to_csv('users.csv', index=False)
+users_df = pd.read_csv('users.csv', index_col='user_id')
+
 
 @dp.message(CommandStart())
 async def start(message: Message):
+    user = message.from_user
+    global users_df
+    if user.id not in users_df.index:
+        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]']
+        users_df.to_csv('users.csv', index=False)
+    else:
+        await message.reply("Рады снова тебя видеть, друг")
+
+
     await message.answer(f"Приветствую тебя, {message.from_user.full_name}\n"
                          f"Вот комманды, доступные тебе:\n"
                          f"/start - запустит\ перезапустит бот\n"
                          f"/get_id - сообщит id текущего чата\n"
                          f"/help - выведет все доступные комманды\n"
                          f"Твой языковой код - {message.from_user.language_code}")
+
 
 @dp.message(Command("get_id"))
 async def get_id(message: Message):
@@ -49,30 +63,25 @@ async def help_command(message: Message):
                          /get_id - сообщит id текущего чата\n
                          /help - выведет все доступные комманды\n""")
 
-# на консультации использован отдельный handler, с более корректной отработкой функции eval
-@dp.message(lambda message: any(word in message.text.strip().lower().split() for word in['exit','"выход"','by','пока']))
-async def goodby(message:Message):
-    await message.reply(f"Извини в ответах я ограничен, правильно задавай вопрос (и цензурно)")
-    users_list.to_csv("users.csv")
 
 @dp.message()
 async def handle_message(message:Message):
-    chat = message.chat.id
-    reqest = message.text
-    if chat not in users_list.index:
-        users_list.loc[chat] = ["[]"]
-    context = json.loads(users_list.loc[chat, "context"])
+    user_id = message.chat.id
+    request = message.text
+    if user_id not in users_df:
+        users_df.loc[user_id] = [2000, 0, message.date, 4000, 0, '[]']
+    context = json.loads(users_df.loc[user_id, "context"])
     context.insert(0, {"role": "system", "content": "Отвечай как опытный программист"})
-    context.append({"role": "user", "content": reqest})
+    context.append({"role": "user", "content": request})
     response = openai.ChatCompletion.create(
         model="gpt-4o-2024-08-06",
         messages=context,
-        max_tokens=100,
+        max_tokens=200,
         temperature=0.7
     )
     ai_response = response['choices'][0]['message']['content']
     context.append({"role": "assistant", "content": ai_response})
-    users_list.at[chat, "context"] = json.dumps(context)
+    users_df.at[user_id, "context"] = json.dumps(context)
     await message.reply(f"Bot:{ai_response}")
 
 async def main():
