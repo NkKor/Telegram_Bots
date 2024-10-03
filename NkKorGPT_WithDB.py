@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import sys
-import os
 import openai
+import os
 import pandas as pd
-import json
+from json import loads, dumps
 import dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
@@ -13,6 +13,7 @@ from aiogram.types import Message
 
 dotenv.load_dotenv()
 token = os.getenv("TELEGRAM_API_TOKEN")
+openai.api_key = os.getenv("OPENAI_TOKEN")
 dp = Dispatcher()
 
 if not os.path.exists("users.csv"):
@@ -36,53 +37,90 @@ async def start(message: Message):
     user = message.from_user
     global users_df
     if user.id not in users_df.index:
-        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]']
-        users_df.to_csv('users.csv', index=False)
+        await message.answer(f"Я не знаю тебя, {user.full_name}, нужно зарегистрироваться, нажми /register\n")
     else:
-        await message.reply("Рады снова тебя видеть, друг")
+        await message.answer(f"Рад видеть тебя снова, {user.full_name}\n")
 
 
-    await message.answer(f"Приветствую тебя, {message.from_user.full_name}\n"
-                         f"Вот комманды, доступные тебе:\n"
-                         f"/start - запустит\ перезапустит бот\n"
-                         f"/get_id - сообщит id текущего чата\n"
-                         f"/help - выведет все доступные комманды\n"
-                         f"Твой языковой код - {message.from_user.language_code}")
+@dp.message(Command("register"))
+async def register(message: Message):
+    user = message.from_user
+    global users_df
+    if user.id not in users_df.index:
+        users_df.loc[user.id] = [500, 0, message.date, 500, 0, '[]']
+        await message.answer(f"Я запомнил тебя, {user.full_name}\n")
+    else:
+        await message.answer(f"Я помню тебя, {user.full_name}, регистрация не требуется\n")
 
 
-@dp.message(Command("get_id"))
-async def get_id(message: Message):
-    chat_id = message.chat.id
-    await message.answer(str(chat_id))
+@dp.message(Command("clear"))
+async def clear(message: Message):
+    user = message.from_user
+    global users_df
+    if user.id in users_df.index:
+        users_df.loc[user.id, "context"] = '[]'
+
+        await message.answer(f"Контекст успешно очищен, {user.full_name}\n")
+    else:
+        await message.answer(f"Сначала нужно зарегистрироваться, {user.full_name}, нажми /register\n")
 
 
-@dp.message(Command("help"))
-async def help_command(message: Message):
-    await message.answer(f"""Вот комманды, доступные тебе:\n
-                         /start - запустит\ перезапустит бот\n
-                         /get_id - сообщит id текущего чата\n
-                         /help - выведет все доступные комманды\n""")
+@dp.message(Command("tokens"))
+async def tokens(message: Message):
+    user = message.from_user
+    global users_df
+    if user.id in users_df.index:
+        await message.answer(f"Осталось токенов: {users_df.loc[user.id, 'token_capacity'] - users_df.loc[user.id, 'token_usage']}\n")
+    else:
+        await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
+
+
+@dp.message(Command("get_tokens"))
+async def get_tokens(message: Message):
+    user = message.from_user
+    global users_df
+    if user.id in users_df.index:
+        users_df.loc[user.id, "token_usage"] = 0
+        await message.answer(f"Токены обновлены, {user.full_name}, доступно: {users_df.loc[user.id, 'token_capacity']}\n")
+    else:
+        await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
 
 
 @dp.message()
 async def handle_message(message:Message):
-    user_id = message.chat.id
-    request = message.text
-    if user_id not in users_df:
-        users_df.loc[user_id] = [2000, 0, message.date, 4000, 0, '[]']
-    context = json.loads(users_df.loc[user_id, "context"])
-    context.insert(0, {"role": "system", "content": "Отвечай как опытный программист"})
-    context.append({"role": "user", "content": request})
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-2024-08-06",
-        messages=context,
-        max_tokens=200,
-        temperature=0.7
-    )
-    ai_response = response['choices'][0]['message']['content']
-    context.append({"role": "assistant", "content": ai_response})
-    users_df.at[user_id, "context"] = json.dumps(context)
-    await message.reply(f"Bot:{ai_response}")
+    user = message.from_user
+    global users_df
+    if user.id in users_df.index:
+
+        context = loads(users_df.loc[user.id, "context"])
+        context.append({"role": "user", "content": message.text})
+        context_len = sum([len(element["content"]) for element in context])
+        # elif message.date - users_df.loc[user.id, "last_message_date"] < 120:
+        #   print("Слишком рано")
+        if context_len > users_df.loc[user.id, "context_capacity"]:
+            await message.answer("Контекст диалога переполнен, придется его очистить, нажми /clear")
+
+        if context_len > users_df.loc[user.id, "context_capacity"]:
+            await message.answer("Контекст диалога переполнен, придется его очистить, нажми /clear")
+        else:
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-2024-08-06",
+                messages=context,
+                max_tokens=100,
+                temperature=0.7
+            )
+            ai_response = response["choices"][0]["message"]["content"]
+            context.append({"role": "assistant", "content": ai_response})
+            users_df.loc[user.id, "token_usage"] += response["usage"]["total_tokens"]
+            users_df.loc[user.id, "last_message_date"] = message.date
+            await message.answer(ai_response)
+
+       # answer_message = "\n".join([element["content"] for element in context])
+        users_df.loc[user.id, "context"] = dumps(context)
+        users_df.to_csv("users.csv")
+    else:
+        await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
+
 
 async def main():
     bot = Bot(token=token)
