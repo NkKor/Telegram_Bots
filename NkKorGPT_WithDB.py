@@ -121,7 +121,6 @@ async def handle_message(message:Message):
     else:
         await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
 
-
 async def main():
     bot = Bot(token=token)
     await dp.start_polling(bot)

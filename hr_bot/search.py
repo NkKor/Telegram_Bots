@@ -35,6 +35,7 @@ def get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=1):
             res_str += '\n\n'
     return res_str
 
+
 def proccess_search_openai(GOOGLE_API_KEY,
                            SEARCH_ENGINE_ID,
                            question,
@@ -72,6 +73,8 @@ def proccess_search_openai(GOOGLE_API_KEY,
         text_response = search_res
     print(text_response)
     return text_response
+
+
 query = "Python await message answer context length"
 search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query)
 

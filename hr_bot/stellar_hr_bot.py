@@ -11,13 +11,13 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 import pandas as pd
 from json import loads, dumps
-from mwp.util import get_gpt_response
-from mwp.search import proccess_search_openai
+from hr_bot.util import get_gpt_response
+from hr_bot.search import proccess_search_openai
 
 dotenv.load_dotenv()
 
 token = os.getenv('TOKEN')
-logger = logging.getLogger(__name__)
+
 dp = Dispatcher()
 
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -84,7 +84,6 @@ async def handle_messages(message: Message):
         context.append({"role": 'user', "content": message.text})
 
         context_len = users_df.loc[user.id, 'context_length']
-
 
         while context_len > users_df.loc[user.id, 'context_capacity']:
             context_len -= len(context[0]['content'])
