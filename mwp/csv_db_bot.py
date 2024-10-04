@@ -51,8 +51,7 @@ async def start(message: Message):
     if user.id in users_df.index:
         await message.answer(f"Рад видеть тебя снова, {user.full_name}\n")
     else:
-        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id]
-        await message.answer(f"Я запомнил тебя, {user.full_name}\n")
+        await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
 
 
 @dp.message(Command("register"))
@@ -63,8 +62,8 @@ async def register(message: Message):
     user = message.from_user
     global users_df
     if user.id not in users_df.index:
-        users_df.loc[user.id] = [500, 0, message.date, 500, 0, '[]', message.chat.id]
-        logger.info(f"Зарегистрировался новый пользователь: {user.id}")
+        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id]
+        logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в файл users.csv")
         await message.answer(f"Я запомнил тебя, {user.full_name}\n")
     else:
         await message.answer(f"Я помню тебя, {user.full_name}, регистрация не требуется\n")
@@ -88,18 +87,22 @@ async def get_tokens(message: Message):
         return await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
 
     if pd.to_datetime(users_df.loc[user.id, 'last_message_date']) + timedelta(minutes=180) > message.date:
+        logger.info(f"Пользователь {user.id} слишком часто отправляет запросы на токены")
         return await message.answer('Не так быстро, попробуй ещё раз позже!')
     else:
         users_df.loc[user.id, "token_usage"] = 0
+        logger.info(f"Обновлены токены пользователю: {user.id}")
         await message.answer(f"Токены обновлены, {user.full_name}, доступно: {users_df.loc[user.id, 'token_capacity']}\n")
 
 
 @dp.message(Command("clear"))
 async def clear(message: Message):
+    """Фенкция оцистки контекста диалога с ботом"""
     user = message.from_user
     global users_df
     if user.id in users_df.index:
         users_df.loc[user.id, "context"] = '[]'
+        logger.info(f"Контекст очищен пользователем: {user.id}")
         await message.answer(f"Контекст успешно очищен, {user.full_name}\n")
     else:
         await message.answer(f"Сначала нужно зарегистрироваться, {user.full_name}, нажми /register\n")
@@ -161,3 +164,4 @@ if __name__ == '__main__':
                         stream=sys.stdout)
     asyncio.run(main())
     users_df.to_csv('users.csv')
+    logger.debug("выполнено сохранение файла users.csv")
