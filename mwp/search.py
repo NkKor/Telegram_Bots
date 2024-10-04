@@ -2,6 +2,7 @@ import os
 import requests
 import openai
 from dotenv import load_dotenv
+from mwp.util import get_gpt_response
 
 
 load_dotenv()
@@ -12,6 +13,14 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 
 
 def get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=1):
+    """
+    Функция для обработки запросов на поиска через API Google
+    :param GOOGLE_API_KEY: ключ для работы с API поиска от Google
+    :param SEARCH_ENGINE_ID: id поисковой машины от Google
+    :param query: поисковой запрос
+    :param pages:
+    :return: res_str - результат поиска в интернете в формате строки
+    """
     res_str = ''
     for p in range(1, pages + 1):
         start = (p - 1) * 10 + 1
@@ -35,43 +44,45 @@ def get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=1):
             res_str += '\n\n'
     return res_str
 
-def proccess_search_openai(GOOGLE_API_KEY,
-                           SEARCH_ENGINE_ID,
-                           question,
-                           pages=1):
-    print('started search...')
-    try:
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {'role': 'system', 'content': f'generate google search query in english for this question\n'
-                                              f'{question}'}
-            ],
-            max_tokens=20,
-            temperature=0.9,
-        )
-        query = response['choices'][0]['message']['content']
-    except Exception as e:
+
+def proccess_search_openai(GOOGLE_API_KEY,SEARCH_ENGINE_ID, question, pages=1):
+    """
+    Функция обработки результатов поиска с помощью OpenAI
+    :param GOOGLE_API_KEY: ключ для работы с API поиска от Google
+    :param SEARCH_ENGINE_ID: id поисковой машины от Google
+    :param question: вопрос для отправки в OpenAI
+    :param pages:
+    :return:
+    """
+    context = [
+                {'role': 'system', 'content': f'сгенерируй запрос в гугл по этому вопросу: {question}'
+                 }
+            ]
+    response = get_gpt_response(context)
+
+    if response["msg"] == 'Failed':
         query = question
-    print(query)
+    else:
+        query = response["response"].choices[0].message['content']
+
+
     search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=pages)
-    print(search_res)
-    try:
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {'role': 'system', 'content': f'Interpret information to suit answer for this question: {question}'},
+
+    context = [
+                {'role': 'system', 'content': f'Интерпретируй информацию для ответа на этот вопрос: {question}'},
                 {'role': 'system', 'content': search_res},
-                {'role': 'system', 'content': 'Write a full and useful answer.'}
-            ],
-            max_tokens=100,
-            temperature=0.9,
-        )
-        text_response = response['choices'][0]['message']['content']
-    except Exception as e:
+                {'role': 'system', 'content': 'Дай полный и полезный ответ.'}
+            ]
+    final_response = get_gpt_response(context)
+
+    if final_response["msg"] == 'Failed':
         text_response = search_res
-    print(text_response)
+    else:
+        text_response = final_response["response"].choices[0].message['content']
+
     return text_response
+
+
 query = "Python await message answer context length"
 search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query)
 
