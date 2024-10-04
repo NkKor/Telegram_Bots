@@ -4,7 +4,6 @@ import sys
 import os
 import openai
 from datetime import timedelta
-from databases.main import start
 import dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
@@ -24,7 +23,7 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-if not os.path.exists("../users.csv"):
+if not os.path.exists("users.csv"):
     users_df = pd.DataFrame(
         columns=[
             'user_id',
@@ -39,7 +38,7 @@ if not os.path.exists("../users.csv"):
     )
     users_df.to_csv('users.csv', index=False)
 
-users_df = pd.read_csv("../users.csv", index_col='user_id')
+users_df = pd.read_csv("users.csv", index_col='user_id')
 
 
 @dp.message(CommandStart())
@@ -74,7 +73,7 @@ async def tokens(message: Message):
     user = message.from_user
     global users_df
     if user.id in users_df.index:
-        await message.answer(f"Осталось токенов: {users_df.loc[user.id, 'token_capacity'] - users_df.loc[user.id, 'token_usage']}\n")
+        await message.answer(f"Осталось токенов: {users_df.loc[user.id,'token_capacity'] - users_df.loc[user.id, 'token_usage']}\n")
     else:
         await message.answer(f"Я не знаю тебя, {user.full_name}, сначала нужно зарегистрироваться, нажми /register\n")
 
@@ -156,12 +155,20 @@ async def handle_messages(message: Message):
 async def main():
     bot = Bot(token=token)
     await dp.start_polling(bot)
-    for chat in users_df['chat_id']:
-        await bot.send_message(chat_id=chat, text="Бот снова работает, Вы можете вернуться к диалогу")
+    try:
+        for chat in users_df['chat_id']:
+            await bot.send_message(chat_id=chat, text="Бот снова работает, Вы можете вернуться к диалогу")
+    except Exception as e:
+        logger.debug(f"Не удалось отправить сообщения. {e}")
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         stream=sys.stdout)
-    asyncio.run(main())
-    users_df.to_csv('users.csv')
-    logger.debug("выполнено сохранение файла users.csv")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Работа бота остановлена")
+    finally:
+        users_df.to_csv('users.csv')
+        logger.info("выполнено сохранение файла users.csv")
+

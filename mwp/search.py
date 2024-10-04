@@ -81,9 +81,3 @@ def proccess_search_openai(GOOGLE_API_KEY,SEARCH_ENGINE_ID, question, pages=1):
         text_response = final_response["response"].choices[0].message['content']
 
     return text_response
-
-
-query = "Python await message answer context length"
-search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query)
-
-print(search_res)
