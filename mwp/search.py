@@ -6,7 +6,8 @@ from mwp.util import get_gpt_response
 
 
 load_dotenv()
-model = 'gpt-4o-mini-2024-07-18'
+gpt_mini = 'gpt-4o-mini-2024-07-18'
+gpt_full = 'gpt-4o-mini-2024-07-18'
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 openai.api_key = os.getenv('OPENAI_API_KEY')
@@ -18,7 +19,7 @@ def get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=1):
     :param GOOGLE_API_KEY: ключ для работы с API поиска от Google
     :param SEARCH_ENGINE_ID: id поисковой машины от Google
     :param query: поисковой запрос
-    :param pages:
+    :param pages: количество страниц для поиска (по умолчанию 1 = 10 результатов на страницу)
     :return: res_str - результат поиска в интернете в формате строки
     """
     res_str = ''
@@ -55,28 +56,26 @@ def proccess_search_openai(GOOGLE_API_KEY,SEARCH_ENGINE_ID, question, pages=1):
     :param SEARCH_ENGINE_ID: id поисковой машины от Google
     :param question: вопрос для отправки в OpenAI
     :param pages:
-    :return:
+    :return: text_response - текстовый ответ от OpenAI
     """
     context = [
-                {'role': 'system', 'content': f'сгенерируй запрос в гугл по этому вопросу: {question}'
+                {'role': 'system', 'content': f'сгенерируй на английском запрос в гугл по этому вопросу: {question}'
                  }
             ]
-    response = get_gpt_response(context)
+    response = get_gpt_response(context, gpt_mini,50, 0.9)
 
     if response["msg"] == 'Failed':
         query = question
     else:
         query = response["response"].choices[0].message['content']
 
-
     search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=pages)
-
     context = [
                 {'role': 'system', 'content': f'Интерпретируй информацию для ответа на этот вопрос: {question}'},
                 {'role': 'system', 'content': search_res},
-                {'role': 'system', 'content': 'Дай полный и полезный ответ.'}
+                {'role': 'system', 'content': 'Дай полный и полезный ответ на русском.'}
             ]
-    final_response = get_gpt_response(context)
+    final_response = get_gpt_response(context, gpt_full,3000, 0.7)
 
     if final_response["msg"] == 'Failed':
         text_response = search_res

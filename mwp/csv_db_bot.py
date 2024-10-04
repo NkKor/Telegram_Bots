@@ -90,6 +90,7 @@ async def get_tokens(message: Message):
         return await message.answer('Не так быстро, попробуй ещё раз позже!')
     else:
         users_df.loc[user.id, "token_usage"] = 0
+        users_df.loc[user.id, "last_message_date"] = message.date
         logger.info(f"Обновлены токены пользователю: {user.id}")
         await message.answer(f"Токены обновлены, {user.full_name}, доступно: {users_df.loc[user.id, 'token_capacity']}\n")
 
@@ -122,7 +123,6 @@ async def handle_messages(message: Message):
         context.append({"role": 'user', "content": message.text})
 
         context_len = users_df.loc[user.id, 'context_length']
-
 
         while context_len > users_df.loc[user.id, 'context_capacity']:
             context_len -= len(context[0]['content'])
