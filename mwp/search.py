@@ -27,6 +27,9 @@ def get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=1):
         url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={SEARCH_ENGINE_ID}&q={query}&start={start}"
         data = requests.get(url).json()
         search_items = data.get('items')
+        if search_items is None:
+            print(f"что то пошло не так в работе функции get_search_result")
+            break
         for i, search_item in enumerate(search_items, start=1):
             try:
                 long_description = search_item["pagemap"]["metatags"][0]["og:description"]

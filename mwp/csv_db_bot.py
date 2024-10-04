@@ -62,7 +62,7 @@ async def register(message: Message):
     global users_df
     if user.id not in users_df.index:
         users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id]
-        logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в файл users.csv")
+        logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в users_df")
         await message.answer(f"Я запомнил тебя, {user.full_name}\n")
     else:
         await message.answer(f"Я помню тебя, {user.full_name}, регистрация не требуется\n")
