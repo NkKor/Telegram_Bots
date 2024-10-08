@@ -1,2 +1,4 @@
-user_id,token_capacity,token_usage,last_message_date,context_capacity,context_length,context
-1125010354,2000,0,2024-09-05 16:24:37+00:00,4000,0,"[{""role"": ""user"", ""content"": ""\u041f\u0440\u0438\u0432\u0435\u0440""}, {""role"": ""user"", ""content"": ""\u041a\u0430\u043a \u0442\u044b""}, {""role"": ""user"", ""content"": ""hi""}, {""role"": ""user"", ""content"": ""how are you""}]"
+user_id,token_capacity,token_usage,last_message_date,context_capacity,context_length,context,chat_id
+775673837.0,2000.0,0.0,2024-10-04 09:59:19+00:00,4000.0,0.0,[],775673837.0
+,,,,,,,
+1054209038.0,2000.0,0.0,2024-10-08 13:17:50+00:00,4000.0,0.0,[],1054209038.0
