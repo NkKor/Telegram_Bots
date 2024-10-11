@@ -19,26 +19,13 @@ from hr_bot.search import proccess_search_openai
 
 
 dotenv.load_dotenv()
-
 token = os.getenv('TOKEN')
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 openai.api_key = os.getenv('OPENAI_API_KEY')
-
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
-
-post_dict = {'01001': 'Технический директор',
-             '01002': 'Инженер по подготовке производства',
-             '01003': 'Главный механик',
-             '01004': 'Электрик',
-             '01005': 'Слесарь механосборочных работ',
-             '01006': 'Заведующий по хозяйственной части',
-             '01007': 'Уборщик производственных и служебных помещений',
-             '01008': 'Служба логистики',
-             '01009': 'Логист производства',
-             '01010': 'Разнорабочий',
-             }
+post_dict = tinfo.posts
 
 if not os.path.exists("users.csv"):
     users_df = pd.DataFrame(
@@ -82,14 +69,29 @@ def main_keybord():
 def instructions_keybord():
     keybord = [
         [
-            InlineKeyboardButton(text="Ссылка1", url="https://yandex.ru"),
-            InlineKeyboardButton(text="Ссылка2", url="https://yandex.ru"),],
+            InlineKeyboardButton(text="Инструкция 1", url="https://yandex.ru"),
+            InlineKeyboardButton(text="Инструкция 1", url="https://yandex.ru"),],
         [
-            InlineKeyboardButton(text="Ссылка3", url="https://jetbrains.com"),
-            InlineKeyboardButton(text="Ссылка4", url="https://jetbrains.com"),],
+            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),
+            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),],
         [
-            InlineKeyboardButton(text="Ссылка5", url="https://jetbrains.com"),
+            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),
         ]
+    ]
+    return keybord
+
+
+def video_keybord():
+    keybord = [
+        [
+            InlineKeyboardButton(text="Лого", callback_data="about_company"),
+            InlineKeyboardButton(text="Наша продукция", callback_data="our_product_1"),
+        ],[
+            InlineKeyboardButton(text="Наша продукция2", callback_data="our_product_2"),
+            InlineKeyboardButton(text="Наша продукция3", callback_data="our_product_3"),
+        ],[
+            InlineKeyboardButton(text="Наша продукция4", callback_data="our_product_4"),
+        ],
     ]
     return keybord
 
@@ -112,10 +114,12 @@ async def start(message: Message):
 
 @dp.message(F.text.contains("Информация о компании"))
 async def video(message: Message):
+    youtube_link = [[InlineKeyboardButton(text="Видео о компании на Youtube", url="https://www.youtube.com/channel/UCykfir9alToieakIrjGz8Qw")]]
+    youtube_kb = InlineKeyboardMarkup(inline_keyboard=youtube_link)
     photo_about = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\pic\about_1.jpg',
                              filename='about_1.jpg')
     await message.answer_photo(photo=photo_about)
-    await message.answer(tinfo.about_company)
+    await message.answer(tinfo.about_company, reply_markup=youtube_kb)
 
 
 @dp.message(F.text.contains("Должностные инструкции"))
@@ -152,17 +156,7 @@ async def vacancy_list(message: Message):
 
 @dp.message(F.text.contains("Видео о компании"))
 async def video(message: Message):
-    video_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="Лого", callback_data="about_company"),
-            InlineKeyboardButton(text="Наша продукция", callback_data="our_product_1"),
-        ],[
-            InlineKeyboardButton(text="Наша продукция2", callback_data="our_product_2"),
-            InlineKeyboardButton(text="Наша продукция3", callback_data="our_product_3"),
-        ],[
-            InlineKeyboardButton(text="Наша продукция4", callback_data="our_product_4"),
-        ],
-    ])
+    video_kb = InlineKeyboardMarkup(inline_keyboard=video_keybord())
     await message.answer(f"Вот видео о компании:", reply_markup=video_kb)
 
 
