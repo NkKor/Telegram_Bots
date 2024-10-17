@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
 import pandas as pd
-import text_info as tinfo
+import tdata as td
 from json import loads, dumps
 from hr_bot.util import get_gpt_response
 from hr_bot.search import proccess_search_openai
@@ -25,7 +25,8 @@ SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 openai.api_key = os.getenv('OPENAI_API_KEY')
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
-post_dict = tinfo.posts
+post_dict = td.posts
+post_learn_links = td.post_learn_links
 
 if not os.path.exists("users.csv"):
     users_df = pd.DataFrame(
@@ -35,11 +36,13 @@ if not os.path.exists("users.csv"):
             'token_usage',
             'last_message_date',
             'context_capacity',
+            'context_usage',
             'context_length',
             'context',
             'chat_id',
             'post_id',
-            'post'
+            'post',
+            'await_coordinates'
         ]
     )
     users_df.to_csv('users.csv', index=False)
@@ -47,7 +50,7 @@ if not os.path.exists("users.csv"):
 users_df = pd.read_csv("users.csv", index_col='user_id')
 
 
-def main_keybord():
+def main_keyboard():
     keybord = [
         [
             KeyboardButton(text='Видео о компании'),
@@ -66,19 +69,29 @@ def main_keybord():
     return keybord
 
 
-def instructions_keybord():
-    keybord = [
-        [
-            InlineKeyboardButton(text="Инструкция 1", url="https://yandex.ru"),
-            InlineKeyboardButton(text="Инструкция 1", url="https://yandex.ru"),],
-        [
-            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),
-            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),],
-        [
-            InlineKeyboardButton(text="Инструкция 1", url="https://jetbrains.com"),
-        ]
-    ]
-    return keybord
+def instructions_keybord(message):
+    """Функция формирующая динамческую клавиатуру из списка
+    ссылок, предоставляя документы только в соответствии с должностью пользователя.
+    :param message - текущее сообщение пользователя, по нему определяется id и соответственно должность пользователя
+    post_learn_links Список ссылок на должностные инструкции хранится в файле tdata.py
+    """
+    global users_df
+    global post_learn_links
+    current_user_post = []
+    user = message.from_user
+    try:
+        current_user_post = users_df.loc[user.id,'post_id']
+    except Exception as e:
+        logger.info("Провал с запросом списка инструкций!!!")
+
+    link_list = post_learn_links.get(current_user_post)
+    keyboard = []
+    try:
+        for n, link in enumerate(link_list):
+            keyboard.append([InlineKeyboardButton(text=f'Инструкция # {n}', url=link)])
+    except Exception as e:
+        logger.info("Провал с формированием списка должностных инструкций!!!")
+    return keyboard
 
 
 def video_keybord():
@@ -99,7 +112,7 @@ def video_keybord():
 @dp.message(CommandStart())
 async def start(message: Message):
     global users_df
-    main_kb = ReplyKeyboardMarkup(keyboard=main_keybord(), resize_keyboard=True, one_time_keyboard=True)
+    main_kb = ReplyKeyboardMarkup(keyboard=main_keyboard(), resize_keyboard=True, one_time_keyboard=True)
 
     user = message.from_user
     if user.id in users_df.index:
@@ -119,12 +132,12 @@ async def video(message: Message):
     photo_about = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\pic\about_1.jpg',
                              filename='about_1.jpg')
     await message.answer_photo(photo=photo_about)
-    await message.answer(tinfo.about_company, reply_markup=youtube_kb)
+    await message.answer(td.about_company, reply_markup=youtube_kb)
 
 
 @dp.message(F.text.contains("Должностные инструкции"))
 async def instructions(message: Message):
-    info_kb = InlineKeyboardMarkup(inline_keyboard=instructions_keybord())
+    info_kb = InlineKeyboardMarkup(inline_keyboard=instructions_keybord(message), resize_keyboard=True)
     await message.answer(f"Нажми на название инструкции, чтобы открыть ссылку", reply_markup=info_kb)
 
 
@@ -132,9 +145,9 @@ async def instructions(message: Message):
 async def corporat_rools(message: Message):
     kb_link = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Ссылка1", url="https://google.com"),
-            InlineKeyboardButton(text="Ссылка2", url="https://yandex.ru"),
-            InlineKeyboardButton(text="Ссылка3", url="https://jetbrains.com")
+            InlineKeyboardButton(text="Правила ВТР", url="https://google.com"),
+            InlineKeyboardButton(text="Правила ВТР", url="https://yandex.ru"),
+            InlineKeyboardButton(text="Правила ВТР", url="https://jetbrains.com")
         ]
     ])
     await message.answer("Ссылки", reply_markup=kb_link)
@@ -146,12 +159,12 @@ async def navigation(message: Message):
     dep_point = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\pic\dep_point.jpg',
                              filename='dep_point.jpg')
     await message.answer_photo(photo=dep_point)
-    await message.answer(f"{tinfo.transport}")
+    await message.answer(f"{td.transport}")
 
 
 @dp.message(F.text.contains("Правила пользования кухней и душевой"))
 async def vacancy_list(message: Message):
-    await message.answer(f"{tinfo.kitchen}")
+    await message.answer(f"{td.kitchen}")
 
 
 @dp.message(F.text.contains("Видео о компании"))
@@ -176,19 +189,19 @@ async def help(message: Message):
 @dp.callback_query(F.data == "help_about_bot")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"О боте:")
-    await callback.message.answer(f"{tinfo.about_bot}")
+    await callback.message.answer(f"{td.about_bot}")
 
 
 @dp.callback_query(F.data == "help_how_to_use")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как пользоваться ботом:")
-    await callback.message.answer(f"{tinfo.how_to_use}")
+    await callback.message.answer(f"{td.how_to_use}")
 
 
 @dp.callback_query(F.data == "hr_dep_contacts")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как связаться с сотрудниками HR отдела:")
-    await callback.message.answer(f"{tinfo.contacts}")
+    await callback.message.answer(f"{td.contacts}")
 
 
 @dp.callback_query(F.data == "about_company")
@@ -243,6 +256,7 @@ async def tokens(message: Message):
 
 @dp.message(Command("get_tokens"))
 async def get_tokens(message: Message):
+    """ Функция для обновления токенов для общения с ChatGPT. При частых попытках обновления токенов пользователем, уведомляет об этом в логах"""
     user = message.from_user
     global users_df
     if user.id not in users_df.index:
@@ -279,9 +293,9 @@ async def handle_messages(message: Message):
     if message.text in post_dict.keys():
         post = post_dict.get(message.text)
         await message.answer(f"Ваша должность по штатному расписанию - {post}\n")
-        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id, message.text, post_dict.get(message.text), False]
+        users_df.loc[user.id] = [4000, 0, message.date, 4000, 0, 0, '[]', message.chat.id, message.text, post_dict.get(message.text), False]
         logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в users_df")
-        await message.answer(f"Я запомнил тебя, {user.full_name}, можешь вернуться к основному меню нажав /start\n")
+        return await message.answer(f"Я запомнил тебя, {user.full_name}, можешь вернуться к основному меню нажав /start\n")
 
     if user.id in users_df.index:
 

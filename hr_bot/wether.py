@@ -4,6 +4,7 @@ import sys
 import os
 import types
 import openai
+import get_geocode
 from datetime import timedelta
 import dotenv
 from aiogram import Bot, Dispatcher
@@ -11,9 +12,10 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 import pandas as pd
 import requests
-import text_info as tinfo
+import tdata as td
 from json import loads, dumps
 from hr_bot.util import get_gpt_response
 from hr_bot.search import proccess_search_openai
@@ -63,9 +65,17 @@ async def start(message: Message):
 async def weather(message: Message):
     user = message.from_user
     if user.id not in users_df.index:
-        await message.answer("Приветствую тебя, {user.full_name}! Тебя нет в базе сотрудников.")
+        await message.answer("Приветствую тебя, {user.full_name}, мы ранее не встречались")
     else:
-        await message.answer("Введите свои координаты: lon lat")
+        builder = ReplyKeyboardBuilder()
+        filename = 'city_coordinates.csv'
+        if os.path.isfile(filename):
+            cities_df = pd.read_csv(filename)
+            for index, row in cities_df.iterrows():
+                builder.add(KeyboardButton(text=str(row['city'])))
+
+
+        await message.answer("О погоде в каком из городов земли ты спрашиваешь:",reply_markup=builder.as_markup())
         users_df.loc[user.id, 'await_coordinates'] = True
 
 
@@ -73,13 +83,25 @@ async def weather(message: Message):
 async def handle_messages(message: Message):
     user = message.from_user
     if user.id not in users_df.index:
-        return await message.answer("Приветствую тебя, {user.full_name}! Тебя нет в базе сотрудников, ты не можешь общаться с ботом.")
+        await message.answer("Приветствую тебя, {user.full_name}, мы ранее не встречались")
     if users_df.loc[user.id, 'token_usage'] >= users_df.loc[user.id, 'token_capacity']:
         return await message.answer('Закончиилсь токены, попробуй написать позже')
 
     if users_df.loc[user.id, 'await_coordinates']:
-        coordinates = message.text.split()
-        await message.answer(f'Подожди немного, ищу прогноз погоды...')
+        filename = 'city_coordinates.csv'
+        city = message.text
+        if os.path.isfile(filename):
+            cities_df = pd.read_csv(filename)
+            if city in cities_df['city'].values:
+                coordinates = cities_df.loc[cities_df['city'] == city, 'longitude'], cities_df.loc[cities_df['city'] == city, 'latitude']
+            else:
+                coordinates = get_geocode.get_city_geo(city)
+                get_geocode.save_city_geo(city, coordinates)
+        else:
+            coordinates = get_geocode.get_city_geo(city)
+            get_geocode.save_city_geo(city, coordinates)
+
+        await message.answer(f'Подожди немного, это того стоит...')
         url = 'https://api.open-meteo.com/v1/forecast'
         params = {
             'latitude': coordinates[0],
@@ -93,10 +115,12 @@ async def handle_messages(message: Message):
         }
         weather = requests.get(url, params=params).json()
         weather_data = ' '.join([str(x) + '-' + str(y) for x, y in weather['current'].items()])
-        weather_context = [{"role": 'system', "content": f"Интерпретируй в понятный человеку формат данные о погоде и дай рекомендации, что одеть. Данне о погоде:{weather_data}"}]
+        response_context = [
+            {"role": 'system', "content": f"{td.personality}"},
+            {"role": 'system', "content": f"Интерпретируй в понятный человеку формат данные о погоде и дай в 100 словах рекомендации, что одеть. Данне о погоде:{weather_data}"}]
         response = openai.ChatCompletion.create(
             model=gpt_model,
-            messages=weather_context,
+            messages=response_context,
             max_tokens=1000,
             temperature=0.7
         )
@@ -107,7 +131,7 @@ async def handle_messages(message: Message):
         content = loads(users_df.loc[user.id, 'context']) + [{"role": 'user', "content": message.text}]
         context_len = users_df.loc[user.id, 'context_usage']
 
-        instruction = [{"role": 'system', "content": "Будь полезным ассистентом, давай развернутые, полезные ответы.>"}]
+        instruction = [{"role": 'system', "content": f"{td.personality}"}, {"role": 'system', "content": "Будь полезным ассистентом, давай развернутые, полезные ответы.>"}]
         instruction = instruction + content
         users_df.loc[user.id, 'context'] = dumps(content)
         users_df.loc[user.id, 'context_usage'] = context_len
