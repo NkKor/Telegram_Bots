@@ -279,7 +279,7 @@ async def handle_messages(message: Message):
     if message.text in post_dict.keys():
         post = post_dict.get(message.text)
         await message.answer(f"Ваша должность по штатному расписанию - {post}\n")
-        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id, message.text, post_dict.get(message.text)]
+        users_df.loc[user.id] = [2000, 0, message.date, 4000, 0, '[]', message.chat.id, message.text, post_dict.get(message.text), False]
         logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в users_df")
         await message.answer(f"Я запомнил тебя, {user.full_name}, можешь вернуться к основному меню нажав /start\n")
 
@@ -287,7 +287,7 @@ async def handle_messages(message: Message):
 
         if users_df.loc[user.id, 'token_usage'] >= users_df.loc[user.id, 'token_capacity']:
             logger.info("У пользователя закончились токены")
-            return await message.answer('Закончиилсь токены, попробуй написать позже')
+            return await message.answer('Закончились токены, попробуй написать позже')
 
         context = loads(users_df.loc[user.id, 'context'])
         context.append({"role": 'user', "content": message.text})

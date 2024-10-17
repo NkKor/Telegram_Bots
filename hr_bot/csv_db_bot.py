@@ -15,7 +15,7 @@ from hr_bot.search import proccess_search_openai
 
 dotenv.load_dotenv()
 
-token = os.getenv('TOKEN')
+token = os.getenv('NKKORTOKEN')
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
 
