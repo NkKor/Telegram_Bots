@@ -20,6 +20,7 @@ from json import loads, dumps
 from hr_bot.util import get_gpt_response
 from hr_bot.search import proccess_search_openai
 
+
 dotenv.load_dotenv()
 token = os.getenv('NKKORTOKEN')
 ninja_key = os.getenv('NINJA_API_KEY')
@@ -73,7 +74,6 @@ async def weather(message: Message):
             cities_df = pd.read_csv(filename)
             for index, row in cities_df.iterrows():
                 builder.add(KeyboardButton(text=str(row['city'])))
-
 
         await message.answer("О погоде в каком из городов земли ты спрашиваешь:",reply_markup=builder.as_markup())
         users_df.loc[user.id, 'await_coordinates'] = True

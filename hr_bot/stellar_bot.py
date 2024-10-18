@@ -2,15 +2,16 @@ import asyncio
 import logging
 import sys
 import os
-import types
 import openai
 from datetime import timedelta
 import dotenv
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types.message import ContentType
+import dalle_img_gen as dalle
 import pandas as pd
 import tdata as td
 from json import loads, dumps
@@ -110,7 +111,7 @@ def video_keybord():
 
 
 @dp.message(CommandStart())
-async def start(message: Message):
+async def start(message: types.Message):
     global users_df
     main_kb = ReplyKeyboardMarkup(keyboard=main_keyboard(), resize_keyboard=True, one_time_keyboard=True)
 
@@ -123,6 +124,20 @@ async def start(message: Message):
     else:
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников.\n")
         await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
+
+
+@dp.message(F.text.contains("Draw"))
+async def gen_img(message: types.Message, bot):
+    user = message.from_user
+    await message.answer("Подожди, выполняется генерация...")
+    prompt = message.text
+    images = []
+    try:
+        images = dalle.generate_image(prompt, user.id)
+    except Exception as e:
+        logger.info(f"Генерация изображения провалена{e}")
+    for image in images:
+        await bot.send_photo(chat_id=user.id, photo=image)
 
 
 @dp.message(F.text.contains("Информация о компании"))
