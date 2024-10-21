@@ -10,8 +10,7 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
-from aiogram.types.message import ContentType
-import dalle_img_gen as dalle
+from hr_bot import dalle_img_gen as dalle
 import pandas as pd
 import tdata as td
 from json import loads, dumps
@@ -75,6 +74,7 @@ def instructions_keybord(message):
     ссылок, предоставляя документы только в соответствии с должностью пользователя.
     :param message - текущее сообщение пользователя, по нему определяется id и соответственно должность пользователя
     post_learn_links Список ссылок на должностные инструкции хранится в файле tdata.py
+    :return: keyboard - type(list) - список кнопок с инструкциями
     """
     global users_df
     global post_learn_links
@@ -128,6 +128,8 @@ async def start(message: types.Message):
 
 @dp.message(F.text.contains("Draw"))
 async def gen_img(message: types.Message, bot):
+    """Обработчик запроса на создание рисунка с помощью DALL-E API
+    Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
     user = message.from_user
     await message.answer("Подожди, выполняется генерация...")
     prompt = message.text
@@ -137,7 +139,29 @@ async def gen_img(message: types.Message, bot):
     except Exception as e:
         logger.info(f"Генерация изображения провалена{e}")
     for image in images:
-        await bot.send_photo(chat_id=user.id, photo=image)
+        photo = FSInputFile(image)
+        await bot.send_photo(chat_id=user.id, photo=photo)
+
+
+@dp.message(F.text.contains("variate"))
+async def variate_img(message: types.Message, bot):
+    """Обработчик запроса на создание вариации рисунка с помощью DALL-E API
+    Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
+    user = message.from_user
+    msg_photo = message.photo
+    with open('image.png', 'wb') as photo_file:
+        photo_file.write(msg_photo)
+
+    """await message.answer("Подожди, выполняется генерация...")
+    prompt = message.text
+    images = []
+    try:
+        images = dalle.generate_image_variation(prompt, user.id)
+    except Exception as e:
+        logger.info(f"Генерация изображения провалена{e}")
+    for image in images:
+        photo = FSInputFile(image)
+        await bot.send_photo(chat_id=user.id, photo=photo)"""
 
 
 @dp.message(F.text.contains("Информация о компании"))
@@ -192,28 +216,28 @@ async def video(message: Message):
 async def help(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="О боте", callback_data="help_about_bot"),
-            InlineKeyboardButton(text="Как пользоваться ботом", callback_data="help_how_to_use"),
+            InlineKeyboardButton(text="О боте", callback_data="о боте"),
+            InlineKeyboardButton(text="Как пользоваться ботом", callback_data="как пользоваться ботом"),
         ],[
-            InlineKeyboardButton(text="Как связаться с сотрудниками HR отдела", callback_data="hr_dep_contacts")
+            InlineKeyboardButton(text="Как связаться с сотрудниками HR отдела", callback_data="контакты hr"),
         ]
     ])
     await message.answer("Доступные разделы:", reply_markup=kb)
 
 
-@dp.callback_query(F.data == "help_about_bot")
+@dp.callback_query(F.data == "о боте")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"О боте:")
     await callback.message.answer(f"{td.about_bot}")
 
 
-@dp.callback_query(F.data == "help_how_to_use")
+@dp.callback_query(F.data == "как пользоваться ботом")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как пользоваться ботом:")
     await callback.message.answer(f"{td.how_to_use}")
 
 
-@dp.callback_query(F.data == "hr_dep_contacts")
+@dp.callback_query(F.data == "контакты hr")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как связаться с сотрудниками HR отдела:")
     await callback.message.answer(f"{td.contacts}")

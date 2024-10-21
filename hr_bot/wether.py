@@ -2,24 +2,18 @@ import asyncio
 import logging
 import sys
 import os
-import types
 import openai
-import get_geocode
-from datetime import timedelta
+from hr_bot import get_geocode
 import dotenv
 from aiogram import Bot, Dispatcher
-from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import KeyboardButton
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 import pandas as pd
 import requests
 import tdata as td
 from json import loads, dumps
-from hr_bot.util import get_gpt_response
-from hr_bot.search import proccess_search_openai
-
 
 dotenv.load_dotenv()
 token = os.getenv('NKKORTOKEN')
