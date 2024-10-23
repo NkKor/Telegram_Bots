@@ -1,9 +1,9 @@
-import openai
-import os
+import tdata as td
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI()
 gpt_model = 'gpt-4o-mini-2024-07-18'
 
 
@@ -18,9 +18,14 @@ def get_gpt_response(context, model=gpt_model, max_tokens=1000, temperature=0.7,
     :return:
     """
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=model,
-            messages=context,
+            messages=[
+                {"role": "system", "content": td.personality},
+                {"role": "user", "content": context},
+                {"role": "assistant", "content": "Ответ"},
+                {"role": "user", "content": "Разделяй ответ по смыслу на абзацы"},
+            ],
             temperature=temperature,
             max_tokens=max_tokens,
             n=1

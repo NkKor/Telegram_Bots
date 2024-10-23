@@ -10,7 +10,6 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
-from hr_bot import dalle_img_gen as dalle
 import pandas as pd
 import tdata as td
 from json import loads, dumps
@@ -124,44 +123,6 @@ async def start(message: types.Message):
     else:
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников.\n")
         await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
-
-
-@dp.message(F.text.contains("Draw"))
-async def gen_img(message: types.Message, bot):
-    """Обработчик запроса на создание рисунка с помощью DALL-E API
-    Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
-    user = message.from_user
-    await message.answer("Подожди, выполняется генерация...")
-    prompt = message.text
-    images = []
-    try:
-        images = dalle.generate_image(prompt, user.id)
-    except Exception as e:
-        logger.info(f"Генерация изображения провалена{e}")
-    for image in images:
-        photo = FSInputFile(image)
-        await bot.send_photo(chat_id=user.id, photo=photo)
-
-
-@dp.message(F.text.contains("variate"))
-async def variate_img(message: types.Message, bot):
-    """Обработчик запроса на создание вариации рисунка с помощью DALL-E API
-    Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
-    user = message.from_user
-    msg_photo = message.photo
-    with open('image.png', 'wb') as photo_file:
-        photo_file.write(msg_photo)
-
-    """await message.answer("Подожди, выполняется генерация...")
-    prompt = message.text
-    images = []
-    try:
-        images = dalle.generate_image_variation(prompt, user.id)
-    except Exception as e:
-        logger.info(f"Генерация изображения провалена{e}")
-    for image in images:
-        photo = FSInputFile(image)
-        await bot.send_photo(chat_id=user.id, photo=photo)"""
 
 
 @dp.message(F.text.contains("Информация о компании"))
@@ -360,7 +321,7 @@ async def handle_messages(message: Message):
         gpt_answer = get_gpt_response(context)
 
         if gpt_answer['msg'] == 'Failed':
-            logger.debug("Что то пошло не так с запросом к OpenAI в функции get_gpt_response")
+            logger.info("Что то пошло не так с запросом к OpenAI в функции get_gpt_response")
             return await message.answer('Что-то пошло не так...')
 
         response = gpt_answer['response']
