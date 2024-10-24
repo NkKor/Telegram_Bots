@@ -1,7 +1,7 @@
-import os
 import dotenv
 import openai
 from openai import OpenAI
+import requests
 
 
 dotenv.load_dotenv()
@@ -26,24 +26,32 @@ def generate_image(description, user_id, num=1):
         n=num,
         size="512x512"
     )
-    img_links = [img_response['data'][i]['url'] for i in range(num)]
-    """for i in range(0, len(img_links)):
-        with open(f"generated/{user_id}{i}_generated.png", "wb") as f:
+    img_links = [img_response.data[i].url for i in range(num)]
+    image_path = []
+    for i in range(0, len(img_links)):
+        new_path = f"generated/{user_id}_{i}_generated.png"
+        image_path.append(new_path)
+        with open(new_path, "wb") as f:
             f.write(requests.get(img_links[i]).content)
-    image_paths = [f"generated/{i}_generated.png" for i in range(num)]"""
     return img_links
 
 
 def d3_image_generate(description, user_id, num=1):
-    response = client.images.generate(
+    img_response = client.images.generate(
         model="dall-e-3",
         prompt=description,
         size="1024x1024",
         quality="standard",
         n=num,
     )
-    image_url = response.data[0].url
-    return image_url
+    img_links = [img_response.data[i].url for i in range(num)]
+    image_path = []
+    for i in range(0, len(img_links)):
+        new_path = f"generated/{user_id}_{i}_generated.png"
+        image_path.append(new_path)
+        with open(new_path, "wb") as f:
+            f.write(requests.get(img_links[i]).content)
+    return img_links
 
 
 def d2_image_variate(user_id, num=1):

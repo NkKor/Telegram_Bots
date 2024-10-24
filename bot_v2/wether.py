@@ -2,8 +2,8 @@ import asyncio
 import logging
 import sys
 import os
-import openai
-from hr_bot import get_geocode
+from openai import OpenAI
+from bot_v2 import get_geocode
 import dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.types import KeyboardButton
@@ -18,7 +18,7 @@ from json import loads, dumps
 dotenv.load_dotenv()
 token = os.getenv('NKKORTOKEN')
 ninja_key = os.getenv('NINJA_API_KEY')
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI()
 gpt_model = 'gpt-4o-mini-2024-07-18'
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
@@ -112,7 +112,7 @@ async def handle_messages(message: Message):
         response_context = [
             {"role": 'system', "content": f"{td.personality}"},
             {"role": 'system', "content": f"Интерпретируй в понятный человеку формат данные о погоде и дай в 100 словах рекомендации, что одеть. Данне о погоде:{weather_data}"}]
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=gpt_model,
             messages=response_context,
             max_tokens=1000,
@@ -130,7 +130,7 @@ async def handle_messages(message: Message):
         users_df.loc[user.id, 'context'] = dumps(content)
         users_df.loc[user.id, 'context_usage'] = context_len
         await message.answer('Дай подумаю...')
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=gpt_model,
             messages=instruction,
             max_tokens=1000,
@@ -144,7 +144,7 @@ async def handle_messages(message: Message):
         users_df.loc[user.id, 'token_usage'] += response['usage']['total_tokens']
         users_df.loc[user.id, 'last_message_date'] = message.date
         users_df.loc[user.id, 'context_length'] += context_len
-        users_df.loc[user.id, 'cotext'] = dumps(content)
+        users_df.loc[user.id, 'context'] = dumps(content)
 
 
 async def main():

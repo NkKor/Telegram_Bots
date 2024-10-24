@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import sys
 import os
@@ -9,12 +10,13 @@ from aiogram import F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, FSInputFile
-from bot_2v import dalle_img_gen as dalle
+from bot_v2 import dalle_img_gen as dalle
 import pandas as pd
 import tdata as td
 from json import loads, dumps
-from bot_2v.util import get_gpt_response
-from bot_2v.search import proccess_search_openai
+from bot_v2.util import get_gpt_response
+from bot_v2.search import proccess_search_openai
+from openai import OpenAI
 
 
 load_dotenv()
@@ -23,6 +25,7 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 
 
+client = OpenAI()
 logger = logging.getLogger(__name__)
 dp = Dispatcher()
 post_dict = td.posts
@@ -83,7 +86,7 @@ def instructions_keybord(message):
     try:
         current_user_post = users_df.loc[user.id,'post_id']
     except Exception as e:
-        logger.info("Провал с запросом списка инструкций!!!")
+        logger.debug("Провал с запросом списка инструкций!!!")
 
     link_list = post_learn_links.get(current_user_post)
     keyboard = []
@@ -91,7 +94,7 @@ def instructions_keybord(message):
         for n, link in enumerate(link_list):
             keyboard.append([InlineKeyboardButton(text=f'Инструкция # {n}', url=link)])
     except Exception as e:
-        logger.info("Провал с формированием списка должностных инструкций!!!")
+        logger.debug("Провал с формированием списка должностных инструкций!!!")
     return keyboard
 
 
@@ -126,22 +129,53 @@ async def start(message: types.Message):
         await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
 
 
-@dp.message(F.text.contains("Draw"))
+@dp.message(F.text.contains("Draw and tell"))
 async def gen_img(message: types.Message, bot):
     """Обработчик запроса на создание рисунка с помощью DALL-E API
     Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
     user = message.from_user
-    img_description = message.text
+    user_img_description = message.text
+
+    response = client.chat.completions.create(
+        model='gpt-4o-mini',
+        messages=[
+            {"role": "system", "content": f"Check safety and ethical aspect of user message, remove harmful deatils if there are"},
+            {"role": "user", "content": user_img_description},
+        ],
+    )
+    img_description = response.choices[0].message.content
     await message.answer("Подожди, выполняется генерация...")
-    prompt = get_gpt_response(img_description)
-    images = []
+    instruction_prompt = [
+        {"role": "system", "content": f"Reply as a helpful AI assistant"},
+        {"role": "user", "content": img_description},
+        {'role': 'system', 'content': 'Answer in json format: '
+                                      '{"text": your text response,'
+                                      ' "picture": prompt for image generation}'},
+        {"role": "user", "content": 'Double check your answer is correct json.'},
+    ]
+    response = client.chat.completions.create(
+        model='gpt-4o-mini',
+        messages=instruction_prompt,
+    )
+    text_response = response.choices[0].message.content
     try:
-        images = dalle.generate_image(prompt, user.id)
+        response_data = json.loads(text_response)
+        try:
+            await message.answer(response_data['text'])
+            images = dalle.d3_image_generate(description=response_data['picture'], user_id=user.id)
+            for image in images:
+                photo = FSInputFile(image)
+                await bot.send_photo(chat_id=user.id, photo=photo)
+        except Exception as e:
+            logger.debug(f"Генерация изображения из команды 'Draw and tell' провалена{e}")
+
     except Exception as e:
-        logger.info(f"Генерация изображения провалена{e}")
-    for image in images:
-        photo = FSInputFile(image)
-        await bot.send_photo(chat_id=user.id, photo=photo)
+        logger.debug(f"Не удалось распарсить ответ от openai{e}")
+        return await message.answer(text_response)
+    finally:
+        pass
+
+
 
 
 @dp.message(Command("variate"))
@@ -158,7 +192,7 @@ async def variate_img(message: types.Message, bot):
         photo = FSInputFile(image)
         return bot.send_photo(chat_id=user.id, photo=photo)
     except Exception as e:
-        logger.info(f"Генерация изображения провалена{e}")
+        logger.debug(f"Генерация изображения провалена{e}")
 
 
 
@@ -358,7 +392,7 @@ async def handle_messages(message: Message):
         gpt_answer = get_gpt_response(context)
 
         if gpt_answer['msg'] == 'Failed':
-            logger.info("Что то пошло не так с запросом к OpenAI в функции get_gpt_response")
+            logger.debug("Что то пошло не так с запросом к OpenAI в функции get_gpt_response")
             return await message.answer('Что-то пошло не так...')
 
         response = gpt_answer['response']
@@ -386,7 +420,7 @@ async def main():
         logger.debug(f"Не удалось отправить сообщения. {e}")
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         stream=sys.stdout)
     try:
         asyncio.run(main())
