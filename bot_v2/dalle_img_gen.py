@@ -8,6 +8,16 @@ dotenv.load_dotenv()
 client = OpenAI()
 
 
+def generate_img_link(description):
+    response = client.images.generate(
+        model="dall-e-3",
+        prompt=description,
+        size="1024x1024",
+        quality="standard",
+    )
+    return response.data[0].url
+
+
 def generate_image_variation(img_file, user_id, size="512x512", num=1):
     img_response = openai.Image.create_variation(
         image=img_file,
