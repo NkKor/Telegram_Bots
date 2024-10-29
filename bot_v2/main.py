@@ -2,36 +2,40 @@ import asyncio
 import logging
 import sys
 import os
+import pandas as pd
+from stellar_bot import *
 from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher
-from aiogram import Router
+from aiogram import Bot, Dispatcher, Router
 from openai import OpenAI
-from aiogram import Router, types
 
 
 load_dotenv()
 client = OpenAI()
 token = os.getenv('TOKEN')
-
 logger = logging.getLogger(__name__)
-interview_router = Router()
-edit_message_router = Router()
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
 
 
 async def main():
+    global users_df
     bot = Bot(token=token)
-    dp = Dispatcher()
-    dp.include_router(interview_router)
-    dp.include_router(edit_message_router)
-
+    dp.include_router(employee_router)
     await dp.start_polling(bot)
-
+    try:
+        for chat in users_df['chat_id']:
+            await bot.send_message(chat_id=chat, text="Бот снова работает, Вы можете вернуться к диалогу")
+    except Exception as e:
+        logger.info(f"Не удалось отправить сообщения старым пользователям. {e}")
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    global users_df
+    logging.basicConfig(level=logging.INFO,
+                        stream=sys.stdout)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Работа бота остановлена")
     finally:
-        pass
+        users_df.to_csv('users.csv', index=False)
+        logger.info("выполнено сохранение файла users.csv")

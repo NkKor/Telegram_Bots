@@ -1,35 +1,26 @@
-import asyncio
 import json
-import logging
-import sys
-import os
 from datetime import timedelta
-from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types
-from aiogram import F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram import Bot, types, F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, Message, CallbackQuery, FSInputFile
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, FSInputFile
-from bot_v2 import dalle_img_gen as dalle
-import pandas as pd
-import tdata as td
 from json import loads, dumps
-from bot_v2.util import get_gpt_response
-from bot_v2.search import proccess_search_openai
-from openai import OpenAI
+from search import proccess_search_openai
+from prompt_parser import Parser
+import dalle_img_gen as dalle
+from main import *
+from gpt_ai import get_gpt_response
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+import tdata as td
+import pandas as pd
 
 
-load_dotenv()
-token = os.getenv('TOKEN')
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-SEARCH_ENGINE_ID = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
-
-
-client = OpenAI()
-logger = logging.getLogger(__name__)
 dp = Dispatcher()
+employee_router = Router()
+hr_manager_router = Router()
 post_dict = td.posts
 post_learn_links = td.post_learn_links
+logger = logging.getLogger(__name__)
 
 if not os.path.exists("users.csv"):
     users_df = pd.DataFrame(
@@ -45,17 +36,19 @@ if not os.path.exists("users.csv"):
             'chat_id',
             'post_id',
             'post',
-            'await_coordinates'
+            'is_new',
+            'is_hr_manager',
+            'is_fired'
         ]
     )
     users_df.to_csv('users.csv', index=False)
-
 users_df = pd.read_csv("users.csv", index_col='user_id')
 
 
-def main_keyboard():
-    keybord = [
-        [
+def new_employee_keyboard():
+    keybord = [[
+            KeyboardButton(text='Пройти входное интервью (обязательно)'),
+        ],[
             KeyboardButton(text='Видео о компании'),
             KeyboardButton(text='Информация о компании'),
         ],[
@@ -65,6 +58,23 @@ def main_keyboard():
             KeyboardButton(text='Схема работы служебного транспорта'),
         ],[
             KeyboardButton(text='Правила пользования кухней и душевой'),
+        ],
+    ]
+    return keybord
+
+
+def employee_keyboard():
+    keybord = [
+        [
+            KeyboardButton(text='Информация о компании'),
+            KeyboardButton(text='Должностные инструкции'),
+        ],[
+            KeyboardButton(text='Правила трудового распорядка'),
+        ],[
+            KeyboardButton(text='Пройти опрос об удовлетворенности'),
+        ],[
+            KeyboardButton(text='Тест по инструкциям'),
+            KeyboardButton(text='Сообщить о проблеме'),
         ],[
 
         ],
@@ -113,23 +123,40 @@ def video_keybord():
     return keybord
 
 
-@dp.message(CommandStart())
-async def start(message: types.Message):
-    global users_df
-    main_kb = ReplyKeyboardMarkup(keyboard=main_keyboard(), resize_keyboard=True, one_time_keyboard=True)
+class Employee(StatesGroup):
+    main = State()
+    certification = State()
+    training = State()
+    fired = State()
 
+
+class NewEmployee(StatesGroup):
+    first_enter = State()
+    main = State()
+    welcome_interview = State()
+    transfer_to_employee = State()
+
+
+@employee_router.message(CommandStart())
+async def start(message: types.Message, state: FSMContext):
+    global users_df
     user = message.from_user
+    new_kb = ReplyKeyboardMarkup(keyboard=new_employee_keyboard(), resize_keyboard=True, one_time_keyboard=True)
+    main_kb = ReplyKeyboardMarkup(keyboard=employee_keyboard(), resize_keyboard=True, one_time_keyboard=True)
     if user.id in users_df.index:
-        await message.answer(f"Рад видеть тебя снова, {user.full_name}\n"
-                             f"Выбери то, что тебя интересует в меню ниже", reply_markup=main_kb)
+        if users_df.loc[user.id, 'is_new']:
+            await message.answer(f"Выбери то, что тебя интересует в меню ниже", reply_markup=new_kb)
+        else:
+            await message.answer(f"Выбери то, что тебя интересует в меню ниже", reply_markup=main_kb)
         await message.answer(f"Нажми /help, если нужна помощь")
 
     else:
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников.\n")
         await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
+        await state.set_state(NewEmployee.first_enter)
 
 
-@dp.message(F.text.contains("Draw and tell"))
+@employee_router.message(F.text.contains("Draw"))
 async def gen_img(message: types.Message, bot):
     """Обработчик запроса на создание рисунка с помощью DALL-E API
     Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
@@ -167,7 +194,7 @@ async def gen_img(message: types.Message, bot):
                 photo = FSInputFile(image)
                 await bot.send_photo(chat_id=user.id, photo=photo)
         except Exception as e:
-            logger.debug(f"Генерация изображения из команды 'Draw and tell' провалена{e}")
+            logger.info(f"Генерация изображения из команды 'Draw and tell' провалена{e}")
 
     except Exception as e:
         logger.debug(f"Не удалось распарсить ответ от openai{e}")
@@ -176,12 +203,10 @@ async def gen_img(message: types.Message, bot):
         pass
 
 
-
-
-@dp.message(Command("variate"))
+"""@dp.message(Command("variate"))
 async def variate_img(message: types.Message, bot):
-    """Обработчик запроса на создание вариации рисунка с помощью DALL-E API
-    Реализация обработки запроса в API представлена в файле dalle_img_gen.py"""
+    #Обработчик запроса на создание вариации рисунка с помощью DALL-E API
+    #Реализация обработки запроса в API представлена в файле dalle_img_gen.py
     user = message.from_user
     msg_photo = bot.get_file(message.photo[-1].file_id)
     with open('image.png', 'wb') as photo_file:
@@ -192,11 +217,10 @@ async def variate_img(message: types.Message, bot):
         photo = FSInputFile(image)
         return bot.send_photo(chat_id=user.id, photo=photo)
     except Exception as e:
-        logger.debug(f"Генерация изображения провалена{e}")
+        logger.debug(f"Генерация изображения провалена{e}")"""
 
 
-
-@dp.message(F.text.contains("Информация о компании"))
+@employee_router.message(F.text.contains("Информация о компании"))
 async def video(message: Message):
     youtube_link = [[InlineKeyboardButton(text="Видео о компании на Youtube", url="https://www.youtube.com/channel/UCykfir9alToieakIrjGz8Qw")]]
     youtube_kb = InlineKeyboardMarkup(inline_keyboard=youtube_link)
@@ -206,13 +230,13 @@ async def video(message: Message):
     await message.answer(td.about_company, reply_markup=youtube_kb)
 
 
-@dp.message(F.text.contains("Должностные инструкции"))
+@employee_router.message(F.text.contains("Должностные инструкции"))
 async def instructions(message: Message):
     info_kb = InlineKeyboardMarkup(inline_keyboard=instructions_keybord(message), resize_keyboard=True)
     await message.answer(f"Нажми на название инструкции, чтобы открыть ссылку", reply_markup=info_kb)
 
 
-@dp.message(F.text.contains("Правила внутреннего трудового распорядка"))
+@employee_router.message(F.text.contains("Правила внутреннего трудового распорядка"))
 async def corporat_rools(message: Message):
     kb_link = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -224,7 +248,7 @@ async def corporat_rools(message: Message):
     await message.answer("Ссылки", reply_markup=kb_link)
 
 
-@dp.message(F.text.contains("Схема работы служебного транспорта"))
+@employee_router.message(F.text.contains("Схема работы служебного транспорта"))
 async def navigation(message: Message):
     await message.answer(f"Вот схема служебного транспорта:")
     dep_point = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\pic\dep_point.jpg',
@@ -233,19 +257,20 @@ async def navigation(message: Message):
     await message.answer(f"{td.transport}")
 
 
-@dp.message(F.text.contains("Правила пользования кухней и душевой"))
+@employee_router.message(F.text.contains("Правила пользования кухней и душевой"))
 async def vacancy_list(message: Message):
     await message.answer(f"{td.kitchen}")
 
 
-@dp.message(F.text.contains("Видео о компании"))
+@employee_router.message(F.text.contains("Видео о компании"))
 async def video(message: Message):
     video_kb = InlineKeyboardMarkup(inline_keyboard=video_keybord())
     await message.answer(f"Вот видео о компании:", reply_markup=video_kb)
 
 
-@dp.message(Command("help"))
-async def help(message: Message):
+@employee_router.message(Command("help"))
+async def help(message: Message, state: FSMContext):
+    await state.clear()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="О боте", callback_data="о боте"),
@@ -254,28 +279,29 @@ async def help(message: Message):
             InlineKeyboardButton(text="Как связаться с сотрудниками HR отдела", callback_data="контакты hr"),
         ]
     ])
-    await message.answer("Доступные разделы:", reply_markup=kb)
+    await message.answer("Чтобы вернуться к основному меню, нажмите /start")
+    await message.answer("Доступные разделы помощи:", reply_markup=kb)
 
 
-@dp.callback_query(F.data == "о боте")
+@employee_router.callback_query(F.data == "о боте")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"О боте:")
     await callback.message.answer(f"{td.about_bot}")
 
 
-@dp.callback_query(F.data == "как пользоваться ботом")
+@employee_router.callback_query(F.data == "как пользоваться ботом")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как пользоваться ботом:")
     await callback.message.answer(f"{td.how_to_use}")
 
 
-@dp.callback_query(F.data == "контакты hr")
+@employee_router.callback_query(F.data == "контакты hr")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Как связаться с сотрудниками HR отдела:")
     await callback.message.answer(f"{td.contacts}")
 
 
-@dp.callback_query(F.data == "about_company")
+@employee_router.callback_query(F.data == "about_company")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Приветственное видео:")
     video_file = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\video\welcom.mp4',
@@ -283,7 +309,7 @@ async def answer(callback: CallbackQuery):
     await callback.message.answer_video(video=video_file)
 
 
-@dp.callback_query(F.data == "our_product_1")
+@employee_router.callback_query(F.data == "our_product_1")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Наша продукция1:")
     video_file = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\video\product(1).mp4',
@@ -291,7 +317,7 @@ async def answer(callback: CallbackQuery):
     await callback.message.answer_video(video=video_file)
 
 
-@dp.callback_query(F.data == "our_product_2")
+@employee_router.callback_query(F.data == "our_product_2")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Наша продукция2:")
     video_file = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\video\product(2).mp4',
@@ -299,7 +325,7 @@ async def answer(callback: CallbackQuery):
     await callback.message.answer_video(video=video_file)
 
 
-@dp.callback_query(F.data == "our_product_3")
+@employee_router.callback_query(F.data == "our_product_3")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Наша продукция3:")
     video_file = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\video\product(3).mp4',
@@ -307,7 +333,7 @@ async def answer(callback: CallbackQuery):
     await callback.message.answer_video(video=video_file)
 
 
-@dp.callback_query(F.data == "our_product_4")
+@employee_router.callback_query(F.data == "our_product_4")
 async def answer(callback: CallbackQuery):
     await callback.message.edit_text(f"Наша продукция4:")
     video_file = FSInputFile(path=r'C:\Users\Z0rg3\PycharmProjects\Telegram_Bots\hr_bot\video\product(4).mp4',
@@ -315,7 +341,7 @@ async def answer(callback: CallbackQuery):
     await callback.message.answer_video(video=video_file)
 
 
-@dp.message(Command("tokens"))
+@employee_router.message(Command("tokens"))
 async def tokens(message: Message):
     user = message.from_user
     global users_df
@@ -325,7 +351,7 @@ async def tokens(message: Message):
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников. Введи ниже код должности, переданный сотрудником HR департамента:\n")
 
 
-@dp.message(Command("get_tokens"))
+@employee_router.message(Command("get_tokens"))
 async def get_tokens(message: Message):
     """ Функция для обновления токенов для общения с ChatGPT. При частых попытках обновления токенов пользователем, уведомляет об этом в логах"""
     user = message.from_user
@@ -343,7 +369,7 @@ async def get_tokens(message: Message):
         await message.answer(f"Токены обновлены, {user.full_name}, доступно: {users_df.loc[user.id, 'token_capacity']}\n")
 
 
-@dp.message(Command("clear"))
+@employee_router.message(Command("clear"))
 async def clear(message: Message):
     """Фенкция оцистки контекста диалога с ботом"""
     user = message.from_user
@@ -356,27 +382,52 @@ async def clear(message: Message):
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников. Введи ниже код должности, переданный сотрудником HR департамента:\n")
 
 
-@dp.message()
-async def handle_messages(message: Message):
+@employee_router.message(NewEmployee.first_enter)
+async def new_employee_reg(message: Message, state: FSMContext):
     global users_df
     global post_dict
     user = message.from_user
+    new_kb = ReplyKeyboardMarkup(keyboard=new_employee_keyboard(), resize_keyboard=True, one_time_keyboard=True)
     if message.text in post_dict.keys():
         post = post_dict.get(message.text)
         await message.answer(f"Ваша должность по штатному расписанию - {post}\n")
-        users_df.loc[user.id] = [4000, 0, message.date, 4000, 0, 0, '[]', message.chat.id, message.text, post_dict.get(message.text), False]
+        users_df.loc[user.id] = [4000, 0, message.date, 4000, 0, 0, '[]',
+                                     message.chat.id, message.text, post_dict.get(message.text),
+                                     True, False, False]
         logger.info(f"Зарегистрировался новый пользователь: {user.id}, добавлена запись в users_df")
-        return await message.answer(f"Я запомнил тебя, {user.full_name}, можешь вернуться к основному меню нажав /start\n")
+        users_df.to_csv('users.csv')
+        await message.answer(f"Добро пожаловать в компанию {message.from_user.full_name}!"
+                                 f"Теперь Вам доступно меню сотрудника.")
+    else:
+        return message.answer(f"Такой должности нет в базе. Свяжитесь с руководителем или убедитесь, что вы правильно ввели код должности.")
+    await state.clear()
+    await message.answer(f"Выберите интересующий Вас раздел.", reply_markup=new_kb)
+    await message.answer(f"Нажми /help, если нужна помощь")
+
+
+@employee_router.message()
+async def handle_messages(message: Message, state: FSMContext):
+    user = message.from_user
+    new_kb = ReplyKeyboardMarkup(keyboard=new_employee_keyboard(), resize_keyboard=True, one_time_keyboard=True)
+    main_kb = ReplyKeyboardMarkup(keyboard=employee_keyboard(), resize_keyboard=True, one_time_keyboard=True)
+    if user.id not in users_df.index:
+        await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников.\n")
+        await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
+        return state.set_state(NewEmployee.first_enter)
+    else:
+        if users_df.loc[user.id, 'is_new']:
+            await message.answer(f"Выбери то, что тебя интересует в меню ниже", reply_markup=new_kb)
+        else:
+            await message.answer(f"Выбери то, что тебя интересует в меню ниже", reply_markup=main_kb)
+        await message.answer(f"Нажми /help, если нужна помощь")
 
     if user.id in users_df.index:
-
         if users_df.loc[user.id, 'token_usage'] >= users_df.loc[user.id, 'token_capacity']:
             logger.info("У пользователя закончились токены")
             return await message.answer('Закончились токены, попробуй написать позже')
 
         context = loads(users_df.loc[user.id, 'context'])
         context.append({"role": 'user', "content": message.text})
-
         context_len = users_df.loc[user.id, 'context_length']
 
         while context_len > users_df.loc[user.id, 'context_capacity']:
@@ -385,47 +436,31 @@ async def handle_messages(message: Message):
 
         await message.answer('Дай подумаю...')
         # Процесс поиска вынесен в отдельный файл search.py
-        search_res = proccess_search_openai(GOOGLE_API_KEY,
+        """search_res = proccess_search_openai(GOOGLE_API_KEY,
                                             SEARCH_ENGINE_ID,
                                             message.text)
-        context.append({"role": 'system', "content": f'Вот информация из интернета: {search_res}'})
-        gpt_answer = get_gpt_response(context)
+        context.append({"role": 'system', "content": f'Вот информация из интернета: {search_res}'})"""
 
-        if gpt_answer['msg'] == 'Failed':
+        try:
+            gpt_answer = get_gpt_response(context)
+        except Exception as e:
             logger.debug("Что то пошло не так с запросом к OpenAI в функции get_gpt_response")
-            return await message.answer('Что-то пошло не так...')
+            return await message.answer('Что-то пошло не так c ChatGpt, попробуте позже...')
 
-        response = gpt_answer['response']
-        await message.answer(response.choices[0].message["content"])
+        response = gpt_answer
+        await message.answer(response.choices[0].message.content)
+        context = Parser(context)._parse_prompt()
+        await message.answer(Parser(context).get_parsed_text())
 
-        context.append({"role": 'user', "content": response.choices[0].message["content"]})
+        context.append({"role": 'user', "content": response.choices[0].message.content})
         token_usage = response['usage']['total_tokens']
 
         users_df.loc[user.id, 'context'] = dumps(context)
         users_df.loc[user.id, 'token_usage'] += token_usage
-        users_df.loc[user.id, 'context_length'] += len(response.choices[0].message["content"] + message.text)
+        users_df.loc[user.id, 'context_length'] += len(response.choices[0].message.content + message.text)
 
     else:
         await message.answer(f"Приветствую тебя, {user.full_name}, тебя нет в базе сотрудников.\n")
         await message.answer(f"Введи ниже код должности, переданный сотрудником HR департамента:\n")
+        return state.set_state(NewEmployee.first_enter)
 
-
-async def main():
-    bot = Bot(token=token)
-    await dp.start_polling(bot)
-    try:
-        for chat in users_df['chat_id']:
-            await bot.send_message(chat_id=chat, text="Бот снова работает, Вы можете вернуться к диалогу")
-    except Exception as e:
-        logger.debug(f"Не удалось отправить сообщения. {e}")
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG,
-                        stream=sys.stdout)
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Работа бота остановлена")
-    finally:
-        users_df.to_csv('users.csv')
-        logger.info("выполнено сохранение файла users.csv")

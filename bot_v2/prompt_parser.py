@@ -30,6 +30,7 @@ class Parser:
         if remaining_text:
             parsed_text_input = {'text': remaining_text.strip()}
             self._parsed_text.append(parsed_text_input)
+            return self._parsed_text
 
     def _process_images(self):
         for i in range(len(self._parsed_text)):
@@ -46,13 +47,3 @@ class Parser:
 
     def get_parsed_text(self):
         return self._parsed_text
-
-
-if __name__ == "__main__":
-    prompt = ("This is a simple prompt "
-              "[Image]{A little gray crow }... "
-              "More fillers we need more fillers [Image]{a dessert, and a camel crosses a horison} "
-              "Ending, fwuh we did it. ")
-    phrase = Parser(prompt)
-    for paragraph in phrase.get_parsed_text():
-        print(paragraph)

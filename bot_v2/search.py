@@ -2,7 +2,7 @@ import os
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
-from mwp.util import get_gpt_response
+from gpt_ai import get_gpt_response
 
 
 load_dotenv()
@@ -67,7 +67,7 @@ def proccess_search_openai(GOOGLE_API_KEY,SEARCH_ENGINE_ID, question, pages=1):
     if response["msg"] == 'Failed':
         query = question
     else:
-        query = response["response"].choices[0].message['content']
+        query = response["response"].choices[0].message.content
 
     search_res = get_search_result(GOOGLE_API_KEY, SEARCH_ENGINE_ID, query, pages=pages)
     context = [
@@ -80,6 +80,6 @@ def proccess_search_openai(GOOGLE_API_KEY,SEARCH_ENGINE_ID, question, pages=1):
     if final_response["msg"] == 'Failed':
         text_response = search_res
     else:
-        text_response = final_response["response"].choices[0].message['content']
+        text_response = final_response["response"].choices[0].message.content
 
     return text_response
