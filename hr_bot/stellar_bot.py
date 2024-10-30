@@ -349,7 +349,7 @@ async def main():
         logger.debug(f"Не удалось отправить сообщения. {e}")
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         stream=sys.stdout)
     try:
         asyncio.run(main())

@@ -47,7 +47,7 @@ users_df = pd.read_csv("users.csv", index_col='user_id')
 
 def new_employee_keyboard():
     keybord = [[
-            KeyboardButton(text='Пройти входное интервью (обязательно)'),
+            KeyboardButton(text='Пройти входное интервью (demo)'),
         ],[
             KeyboardButton(text='Видео о компании'),
             KeyboardButton(text='Информация о компании'),
@@ -71,10 +71,10 @@ def employee_keyboard():
         ],[
             KeyboardButton(text='Правила трудового распорядка'),
         ],[
-            KeyboardButton(text='Пройти опрос об удовлетворенности'),
+            KeyboardButton(text='Пройти опрос об удовлетворенности (demo)'),
         ],[
-            KeyboardButton(text='Тест по инструкциям'),
-            KeyboardButton(text='Сообщить о проблеме'),
+            KeyboardButton(text='Тест по инструкциям(demo)'),
+            KeyboardButton(text='Сообщить о проблеме(demo)'),
         ],[
 
         ],
